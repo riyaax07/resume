@@ -108,6 +108,47 @@ export const Hero: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Deck effect: a card scales down + dims as the next card slides over it
+  useEffect(() => {
+    if (viewMode !== 'stack') return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    let ticking = false;
+
+    const update = () => {
+      ticking = false;
+      const cards = pillarRefs.current;
+      cards.forEach((el, i) => {
+        const next = cards[i + 1];
+        if (!el || !next) return; // last card never gets covered
+
+        // distance between this card's top and the next card's top
+        const gap = next.getBoundingClientRect().top - el.getBoundingClientRect().top;
+        // 0 = untouched, 1 = fully covered
+        const progress = 1 - Math.min(Math.max(gap / el.offsetHeight, 0), 1);
+
+        el.style.transform = `scale(${1 - progress * 0.06})`;
+        el.style.filter = `brightness(${1 - progress * 0.4})`;
+      });
+    };
+
+    const onScroll = () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(update);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    update();
+
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [viewMode]);
+
   const scrollToPillar = (idx: number) => {
     setActivePillarIdx(idx);
     const target = pillarRefs.current[idx];
@@ -210,49 +251,8 @@ export const Hero: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Live Telemetry Daemon (5 cols) */}
+          {/* Right column (5 cols) - this wrapper was missing before */}
           <div className="lg:col-span-5 space-y-4">
-            <ScrollReveal3D delay={120}>
-              <div className="p-4 sm:p-5 bg-[#161412] border border-[#27272A] rounded-[2px] space-y-4 shadow-xl">
-                <div className="flex items-center justify-between border-b border-[#27272A] pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse"></span>
-                    <span className="font-mono text-[11px] text-white font-semibold uppercase tracking-wider">
-                      daemon_telemetry.sys
-                    </span>
-                  </div>
-                  <span className="font-mono text-[10px] text-[#71717A]">PID: 4082</span>
-                </div>
-
-                <div className="space-y-2 font-mono text-[11px] sm:text-[12px]">
-                  <div className="flex justify-between py-1 border-b border-[#27272A]/50">
-                    <span className="text-[#71717A]">ARCHETYPE:</span>
-                    <span className="text-white font-medium">Distributed &amp; Low-Latency</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[#27272A]/50">
-                    <span className="text-[#71717A]">ACTIVE TARGET:</span>
-                    <span className="text-[#10B981] font-semibold">GPO-CIS / Privacy Pipeline</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[#27272A]/50">
-                    <span className="text-[#71717A]">THROUGHPUT:</span>
-                    <span className="text-white font-medium">1.2M events/sec benchmark</span>
-                  </div>
-                  <div className="flex justify-between py-1 border-b border-[#27272A]/50">
-                    <span className="text-[#71717A]">NETWORK BOUNDARY:</span>
-                    <span className="text-[#0f6bf5]">0ms External Egress</span>
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-[#27272A] flex items-center justify-between text-[11px] font-mono">
-                  <span className="text-[#71717A]">UPTIME: 99.98%</span>
-                  <span className="text-[#10B981] flex items-center gap-1 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    SYSTEM HEALTHY
-                  </span>
-                </div>
-              </div>
-            </ScrollReveal3D>
-
             {/* Quick Proof Pills */}
             <div className="grid grid-cols-2 gap-2 font-mono text-[11px]">
               <div className="p-2.5 bg-[#1A1A1A] border border-[#27272A] rounded-[2px]">
@@ -360,10 +360,16 @@ export const Hero: React.FC = () => {
                 {HOME_PILLARS_DATA.map((pillar, idx) => (
                   <div
                     key={pillar.id}
-                    ref={(el) => (pillarRefs.current[idx] = el)}
-                    className="sticky top-[68px] sm:top-[76px] lg:top-[108px] transition-transform duration-300"
+                    ref={(el) => {
+                      pillarRefs.current[idx] = el;
+                    }}
+                    // NOTE: no transition-transform here. The deck effect updates
+                    // transform every frame, and a CSS transition would make it lag.
+                    className="sticky top-[68px] sm:top-[76px] lg:top-[108px]"
                     style={{
                       zIndex: 10 + idx,
+                      transformOrigin: 'top center', // shrink toward the top edge
+                      willChange: 'transform, filter',
                     }}
                   >
                     <ScrollReveal3D enableMouseTilt={true} intensity={0.9}>
